@@ -7,22 +7,31 @@ mod tests {
         mmv::mmv,
     };
     use std::fs::File;
-    use std::io::Write;
+    use std::{collections::HashSet, io::Write};
     use tempfile::TempDir;
 
     #[test]
-    fn test_capture_file_by_pattern() -> Result<(), std::io::Error> {
+    fn test_capture_file_by_pattern_basic() -> Result<(), std::io::Error> {
         let file_types: Vec<&str> = vec!["bin", "txt", "jpeg"];
-        let src_dir = TempDir::new()?;
-        for expansion in file_types {
+        let src_dir = TempDir::new().unwrap();
+        for expansion in &file_types {
             File::create(src_dir.path().join(format!("tests.{}", expansion)))?;
         }
 
-        let result = capture_files_by_pattern("t*.*");
+        let src_pattern = format!("{}/t*.*", src_dir.path().display());
+        let result = capture_files_by_pattern(&src_pattern);
         assert!(result.is_ok());
         let captured_files = result.unwrap();
-        assert_eq!(captured_files, vec!["tests.bin", "tests.txt", "tests.jpeg"]);
-
+        let mut eq: HashSet<String> = HashSet::new();
+        for expansion in &file_types {
+            let tmp_file = src_dir
+                .path()
+                .join(format!("tests.{}", expansion))
+                .display()
+                .to_string();
+            eq.insert(tmp_file);
+        }
+        assert_eq!(captured_files, eq);
         let result = capture_files_by_pattern("abcdef/*.txt");
         assert!(result.is_err());
         let error = result.unwrap_err();
@@ -73,7 +82,8 @@ mod tests {
         let result = rename_file_by_pattern(source_pattern, path, destination_pattern);
         assert!(result.is_err());
         if let Err(MassMoveError::MatchError(message)) = result {
-            assert!(message.contains("Pattern {} could not match the path {}."));
+            assert!(message.contains(source_pattern));
+            assert!(message.contains(path));
         } else {
             panic!("Expected a MatchError.");
         }
@@ -128,7 +138,8 @@ mod tests {
         let result = rename_file_by_pattern(source_pattern, path, destination_pattern);
         assert!(result.is_err());
         if let Err(MassMoveError::MatchError(message)) = result {
-            assert!(message.contains("Pattern {} could not match the path {}."));
+            assert!(message.contains(source_pattern));
+            assert!(message.contains(path));
         } else {
             panic!("Expected a MatchError.");
         }
@@ -136,9 +147,22 @@ mod tests {
 
     #[test]
     fn test_mmv_basic() {
-        let tmp_dir = TempDir::new().unwrap();
-        let src_file_path = tmp_dir.path().join("file_123.txt");
-        let mut src_file = File::create(src_file_path).unwrap();
-        writeln!(src_file, "This is a test file.");
+        let dir = TempDir::new().unwrap();
+        let source_file = dir.path().join("some_part_filename.txt");
+        let destination_file = dir.path().join("changed_part_filename.txt");
+
+        let mut source = File::create(&source_file).unwrap();
+        writeln!(source, "This is a test file.").unwrap();
+
+        let args = CLI {
+            source_pattern: format!("{}/some_*_filename.txt", dir.path().display()),
+            destination_pattern: format!("{}/changed_#1_filename.txt", dir.path().display()),
+            force: false,
+        };
+
+        let result = mmv(args);
+        assert!(result.is_ok());
+        assert!(!source_file.exists());
+        assert!(destination_file.exists());
     }
 }
