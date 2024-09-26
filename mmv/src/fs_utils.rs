@@ -67,6 +67,23 @@ pub fn capture_files_by_pattern(pattern: &str) -> Result<HashSet<String>, MassMo
     Ok(files_by_pattern)
 }
 
+fn path_check(pattern: &str, marker: &str) -> Result<(), MassMoveError> {
+    let parent_path = Path::new(pattern)
+        .parent()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+
+    if parent_path.contains(marker) {
+        return Err(MassMoveError::PathError(
+            "Invalid pattern entered. The pattern should only contain * in the file name."
+                .to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
 /// This function creates a new name based on the pattern by which the file was found, the path to the file itself, and the pattern by which the path should be changed.
 /// # Return value
 /// Returns `Result<(), MassMoveerror>`, where:
@@ -100,31 +117,8 @@ pub fn rename_file_by_pattern(
     path: &str,
     destination_pattern: &str,
 ) -> Result<String, MassMoveError> {
-    let parent_path = Path::new(source_pattern)
-        .parent()
-        .unwrap()
-        .to_string_lossy()
-        .to_string();
-
-    if parent_path.contains('*') {
-        return Err(MassMoveError::PathError(
-            "Invalid pattern entered. The pattern should only contain * in the file name."
-                .to_string(),
-        ));
-    }
-
-    let parent_path = Path::new(destination_pattern)
-        .parent()
-        .unwrap()
-        .to_string_lossy()
-        .to_string();
-
-    if parent_path.contains('#') {
-        return Err(MassMoveError::PathError(
-            "Invalid pattern entered. The pattern should only contain markers in the file name."
-                .to_string(),
-        ));
-    }
+    path_check(source_pattern, "*")?;
+    path_check(destination_pattern, "#")?;
 
     let source_str = source_pattern.replace(".", "\\.").replace("*", "(.*)");
     let regex = Regex::new(&source_str)?;
